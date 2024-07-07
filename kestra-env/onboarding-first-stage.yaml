@@ -1,0 +1,41 @@
+id: onboarding-first-stage
+namespace: company.myteam
+description: First part of onboarding flow
+
+labels:
+  env: dev
+  project: perfectbank
+
+inputs:
+  - id: firstName
+    type: STRING
+  - id: lastName
+    type: STRING
+  - id: email
+    type: STRING
+  - id: city
+    type: STRING
+  - id: accountType
+    type: STRING
+  - id: currency
+    type: STRING
+
+tasks:
+  - id: antifraud-checks
+    type: io.kestra.plugin.core.http.Request
+    uri: http://host.docker.internal:8083/antifraud-service/checks
+    method: POST
+    contentType: application/json
+    headers:
+      X-Request-Id: "{{ execution.id }}"
+    body: |
+      {
+        "firstName": "{{ inputs.firstName }}",
+        "lastName": "{{ inputs.lastName }}",
+        "email": "{{ inputs.email }}",
+        "city": "{{ inputs.city }}"
+      }
+    retry:
+      type: constant
+      maxAttempt: 5
+      interval: PT3S
