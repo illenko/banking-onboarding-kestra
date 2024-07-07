@@ -1,0 +1,67 @@
+id: onboarding-second-stage
+namespace: company.myteam
+description: Second part of onboarding flow
+
+labels:
+  env: dev
+  project: perfectbank
+
+inputs:
+  - id: initial_flow
+    type: STRING
+  - id: account_id
+    type: STRING
+  - id: agreement_id
+    type: STRING
+  - id: signature
+    type: STRING
+
+tasks:
+  - id: sing_agreement
+    type: io.kestra.plugin.core.http.Request
+    uri: http://host.docker.internal:8083/signature-service/signatures
+    method: POST
+    contentType: application/json
+    headers:
+      X-Request-Id: "{{ execution.id }}"
+    body: |
+      {
+          "agreement_id": "{{ inputs.agreement_id }}",
+          "signature": "{{ inputs.signature }}"
+      }
+    retry:
+      type: constant
+      maxAttempt: 5
+      interval: PT3S
+  - id: check_signature
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ json(outputs.sing_agreement.body).valid }}"
+    then:
+      - id: create_card
+        type: io.kestra.plugin.core.http.Request
+        uri: http://host.docker.internal:8083/card-service/cards
+        method: POST
+        contentType: application/json
+        headers:
+          X-Request-Id: "{{ execution.id }}"
+        body: |
+          {
+              "account_id": "{{ inputs.account_id }}"
+          }
+    else:
+      - id: failure_handler
+        type: io.kestra.plugin.core.log.Log
+        level: ERROR
+        message: "Error in some steps"
+
+errors:
+  - id: failure_handler
+    type: "io.kestra.plugin.core.log.Log"
+    level: ERROR
+    message: "Error in some steps"
+
+outputs:
+  - id: agreement_id
+    value: "{{ json(outputs.create_agreement.body).id }}"
+  - id: account_id
+    value: "{{ json(outputs.create_account.body).id }}"

@@ -7,6 +7,8 @@ labels:
   project: perfectbank
 
 inputs:
+  - id: sessionId
+    type: STRING
   - id: firstName
     type: STRING
   - id: lastName
@@ -21,7 +23,7 @@ inputs:
     type: STRING
 
 tasks:
-  - id: antifraud-checks
+  - id: antifraud_checks
     type: io.kestra.plugin.core.http.Request
     uri: http://host.docker.internal:8083/antifraud-service/checks
     method: POST
@@ -30,8 +32,8 @@ tasks:
       X-Request-Id: "{{ execution.id }}"
     body: |
       {
-        "firstName": "{{ inputs.firstName }}",
-        "lastName": "{{ inputs.lastName }}",
+        "first_name": "{{ inputs.firstName }}",
+        "last_name": "{{ inputs.lastName }}",
         "email": "{{ inputs.email }}",
         "city": "{{ inputs.city }}"
       }
@@ -39,3 +41,74 @@ tasks:
       type: constant
       maxAttempt: 5
       interval: PT3S
+  - id: check_antifraud_result
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ json(outputs.antifraud_checks.body).passed }}"
+    then:
+      - id: create_user
+        type: io.kestra.plugin.core.http.Request
+        uri: http://host.docker.internal:8083/user-service/users
+        method: POST
+        contentType: application/json
+        headers:
+          X-Request-Id: "{{ execution.id }}"
+        body: |
+          {
+            "first_name": "{{ inputs.firstName }}",
+            "last_name": "{{ inputs.lastName }}",
+            "email": "{{ inputs.email }}",
+            "city": "{{ inputs.city }}"
+          }
+        retry:
+          type: constant
+          maxAttempt: 5
+          interval: PT3S
+      - id: create_account
+        type: io.kestra.plugin.core.http.Request
+        uri: http://host.docker.internal:8083/account-service/accounts
+        method: POST
+        contentType: application/json
+        headers:
+          X-Request-Id: "{{ execution.id }}"
+        body: |
+          {
+            "user_id": "{{ json(outputs.create_user.body).id }}",
+            "type": "{{ inputs.accountType }}",
+            "currency": "{{ inputs.currency }}"
+          }
+        retry:
+          type: constant
+          maxAttempt: 5
+          interval: PT3S
+      - id: create_agreement
+        type: io.kestra.plugin.core.http.Request
+        uri: http://host.docker.internal:8083/agreement-service/agreements
+        method: POST
+        contentType: application/json
+        headers:
+          X-Request-Id: "{{ execution.id }}"
+        body: |
+          {
+            "user_id": "{{ json(outputs.create_user.body).id }}",
+            "account_id": "{{ json(outputs.create_account.body).id }}"
+          }
+        retry:
+          type: constant
+          maxAttempt: 5
+          interval: PT3S
+    else:
+      - id: when_false
+        type: io.kestra.plugin.core.log.Log
+        message: 'Condition was false'
+
+errors:
+  - id: failure_handler
+    type: "io.kestra.plugin.core.log.Log"
+    level: ERROR
+    message: "Error in some steps"
+
+outputs:
+  - id: agreement_id
+    value: "{{ json(outputs.create_agreement.body).id }}"
+  - id: account_id
+    value: "{{ json(outputs.create_account.body).id }}"
