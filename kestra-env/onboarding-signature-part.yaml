@@ -1,4 +1,4 @@
-id: onboarding-second-stage
+id: onboarding-signature
 namespace: company.myteam
 description: Second part of onboarding flow
 
@@ -49,7 +49,7 @@ tasks:
               "account_id": "{{ inputs.account_id }}"
           }
     else:
-      - id: failure_handler
+      - id: signature_not_valid
         type: io.kestra.plugin.core.log.Log
         level: ERROR
         message: "Error in some steps"
@@ -59,9 +59,3 @@ errors:
     type: "io.kestra.plugin.core.log.Log"
     level: ERROR
     message: "Error in some steps"
-
-outputs:
-  - id: agreement_id
-    value: "{{ json(outputs.create_agreement.body).id }}"
-  - id: account_id
-    value: "{{ json(outputs.create_account.body).id }}"
